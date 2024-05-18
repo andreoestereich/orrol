@@ -4,8 +4,10 @@ import pandas as pd
 import geopandas as gpd
 import numpy as np
 import cv2 as cv
-from shapely import Polygon, MultiPolygon
-import matplotlib.pyplot as plt
+from shapely import Polygon, MultiPolygon, centroid
+import folium
+
+#import matplotlib.pyplot as plt
 
 def getCoords(coorText):
     coordinates = list()
@@ -15,9 +17,9 @@ def getCoords(coorText):
             coordinates.append((int(sp[0]),int(sp[1])))
     return np.array(coordinates)
 
-
+#16 is the same upscalling used in the game when you zoom in
 def upscalling(x):
-    return 10*x
+    return 16*x
 
 #frame has form (xMin, xMax, yMin, yMax)
 def mkImg(coordintes, frame):
@@ -30,8 +32,12 @@ def mkImg(coordintes, frame):
 
 def getPoly(coordText, frame):
     img = mkImg(getCoords(coordText), frame)
-    contours, hierarchy = cv.findContours(img, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-    return Polygon(np.squeeze(contours[0]))
+    contours, _ = cv.findContours(img, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    poly = MultiPolygon().union(Polygon(np.squeeze(contours[0])))
+    for cont in contours[1:]:
+        poly = poly.difference(Polygon(np.squeeze(cont)))
+
+    return poly
 
 def getRegions():
     lg_xml = pd.read_xml('region4-00101-02-21-legends.xml', xpath='./regions/*', encoding='CP437')
@@ -46,22 +52,47 @@ def getRegions():
     oceanCoords = getCoords(regions[regions['type']=='Ocean']['coords'][0]).transpose()
     frameSize = (oceanCoords[0].min(), oceanCoords[0].max(), oceanCoords[1].min(), oceanCoords[1].max())
 
-    img = mkImg(oceanCoords.transpose(),frameSize)
-
-    contours, hierarchy = cv.findContours(img, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-    poly = MultiPolygon().union(Polygon(np.squeeze(contours[0])))
-    for cont in contours[1:]:
-        poly = poly.difference(Polygon(np.squeeze(cont)))
-
-
     regions['geometry'] = regions['coords'].apply(getPoly, args=(frameSize,))
-    regions.loc[regions['type']=='Ocean','geometry'] = poly
 
     del regions['coords']
 
+    #return regions
     return gpd.GeoDataFrame(regions)
 
-biomeColor = {'Ocean':'blue', 'Hills':'gray', 'Grassland':'green', 'Wetland':'purple', 'Desert':'yellow', 'Mountains':'black', 'Forest':'darkgreen', 'Tundra':'steelblue', 'Glacier':'white'}
+def makeRegionsMap():
+    biomeColor = {'Ocean':'blue', 'Hills':'gray', 'Grassland':'green', 'Wetland':'purple', 'Desert':'yellow', 'Mountains':'black', 'Forest':'darkgreen', 'Tundra':'steelblue', 'Glacier':'white'}
 
 
+    regions = getRegions()
 
+    center = centroid(regions[regions["type"]=="Ocean"]["geometry"][0])
+    center = list(center.coords)[0]
+
+    base_map = folium.Map(crs='Simple', zoom_start=0, tiles=None, location=center, default_zoom_start=20)
+
+    popup = folium.GeoJsonPopup(
+        fields=["name", "evilness"],
+        localize=True,
+        labels=True,
+        sticky=False,
+        style="""
+            background-color: #F0EFEF;
+            border: 2px solid black;
+            border-radius: 3px;
+            box-shadow: 3px;
+        """,
+        max_width=800
+    )
+
+    mp = folium.GeoJson(data=regions.to_json(),
+        style_function=lambda x: {
+            "color": "white",
+            "weight": 0,
+            "dashArray": "5, 5",
+            "fillColor": biomeColor[x["properties"]["type"]]
+        }, popup=popup)
+    mp.add_to(base_map)
+    return base_map
+
+map = makeRegionsMap()
+map.save("map.html")
