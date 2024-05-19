@@ -9,6 +9,12 @@ import folium
 
 #import matplotlib.pyplot as plt
 
+popUpStyle = """
+            background-color: #F0EFEF;
+            border-radius: 3px;
+            box-shadow: 3px;
+            """
+
 def getCoords(coorText):
     coordinates = list()
     for coord in coorText.split('|'):
@@ -60,6 +66,8 @@ def getRegions():
 
     regions = lg_xml.join(lgp_xml)
 
+    regions.name = regions.name.str.title()
+
     oceanCoords = getCoords(regions[regions['type']=='Ocean']['coords'][0]).transpose()
     frameSize = (oceanCoords[0].min(), oceanCoords[0].max(), oceanCoords[1].min(), oceanCoords[1].max())
 
@@ -71,7 +79,7 @@ def getRegions():
     return gpd.GeoDataFrame(regions)
 
 def makeRegionsMap():
-    biomeColor = {'Ocean':'blue', 'Hills':'gray', 'Grassland':'green', 'Wetland':'purple', 'Desert':'yellow', 'Mountains':'black', 'Forest':'darkgreen', 'Tundra':'steelblue', 'Glacier':'white'}
+    biomeColor = {'Ocean':'#2f49ff', 'Hills':'grey', 'Grassland':'lightgreen', 'Wetland':'brown', 'Desert':'yellow', 'Mountains':'black', 'Forest':'darkgreen', 'Tundra':'steelblue', 'Glacier':'white'}
 
 
     regions = getRegions()
@@ -79,20 +87,15 @@ def makeRegionsMap():
     center = centroid(regions[regions["type"]=="Ocean"]["geometry"][0])
     center = list(center.coords)[0]
 
-    base_map = folium.Map(crs='Simple', zoom_start=0, tiles=None, location=center, default_zoom_start=20)
+    base_map = folium.Map(crs='Simple', zoom_start=0, tiles=None, location=center, default_zoom_start=24)
 
     popup = folium.GeoJsonPopup(
-        fields=["name", "evilness"],
+        fields=["name", "evilness","type"],
         localize=True,
         labels=True,
         sticky=False,
-        style="""
-            background-color: #F0EFEF;
-            border: 2px solid black;
-            border-radius: 3px;
-            box-shadow: 3px;
-        """,
-        max_width=800
+        style=popUpStyle,
+        max_width=400
     )
 
     mp = folium.GeoJson(data=regions.to_json(),
@@ -105,11 +108,7 @@ def makeRegionsMap():
     mp.add_to(base_map)
     return base_map
 
-def makeSitesMap():
-    # siteIcons = {'camp':'☼', 'cave':'•', 'dark fortress':'Π', 'dark pits': 'º', 'forest retreat': '¶','fortress':'Ω','castle': '○',
-    #              'fort': '○','hamlet': '=','hillocks': 'Ω','labyrinth': '#','lair': '•','monastery': '○','mountain halls': 'Ω','ruins': 'μ',
-    #              'forest retreat ruins': 'μ','shrine': 'Å','tomb': '0','tower': 'I','town': '+','vault': '■'}
-
+def sitesNEntities():
     sites = pd.read_xml('region4-00101-02-21-legends.xml', xpath='./sites/*', encoding='CP437')
     sites.set_index('id', inplace=True)
 
@@ -118,15 +117,53 @@ def makeSitesMap():
     lgp_xml.rename(columns={'structures':'structures_plus'}, inplace=True)
 
     sites = sites.join(lgp_xml)
+    del lgp_xml
 
-    siteLayer = folium.FeatureGroup('Sites', control=False)
+    entities = pd.read_xml('region4-00101-02-21-legends.xml', xpath='./entities/*', encoding='CP437')
+    entities.set_index('id', inplace=True)
+    
+    lgp_xml = pd.read_xml('region4-00101-02-21-legends_plus.xml', xpath='./entities/*')
+    lgp_xml = lgp_xml.filter(['id','race','type'])
+    lgp_xml.set_index('id', inplace=True)
+    entities = entities.join(lgp_xml)
+
+    sites.name = sites.name.str.title()
+    entities.race = entities.race.str.replace('_',' ', regex=True)
+    entities.name = entities.name.str.title()
+    entities.race = entities.race.str.title()
+
+    return (sites, entities)
+
+def makeSitesMap():
+    # siteIcons = {'camp':'☼', 'cave':'•', 'dark fortress':'Π', 'dark pits': 'º', 'forest retreat': '¶','fortress':'Ω','castle': '○',
+    #              'fort': '○','hamlet': '=','hillocks': 'Ω','labyrinth': '#','lair': '•','monastery': '○','mountain halls': 'Ω','ruins': 'μ',
+    #              'forest retreat ruins': 'μ','shrine': 'Å','tomb': '0','tower': 'I','town': '+','vault': '■'}
+    def sitePopup(name, owner_id, civ_id):
+        html = ""
+        if isinstance(name,str):
+            html += "<h4>%s</h4><br>"%(name)
+        else:
+            html += "<h4>Unknown</h4><br>"
+        if np.isnan(owner_id):
+            html += "<b>Unknown owner</b>"
+        else:
+            html += "<b>"+entities['name'][owner_id]+"</b>"
+        if not np.isnan(civ_id):
+            html += ' from ' + entities['name'][civ_id]
+            html += ' (' + entities['race'][civ_id] + ').'
+        return html
+
+    sites, entities = sitesNEntities()
+
+    siteLayer = folium.FeatureGroup('Sites', control=True)
     for _, row in sites.iterrows():
         rect = getRectangle(row['rectangle'])
         folium.Rectangle(bounds=rect, color=None, fill=True, fill_color='#ff0000', fill_opacity=0.2).add_to(siteLayer)
         center = rectangleCenter(rect)
         imgPath = 'imgs/sites/Icon_site_%s.png'%(row.type.replace(' ','_'))
         icon = folium.features.CustomIcon(imgPath, icon_size=(16,16))
-        folium.Marker(center, tooltip=row['name'], icon=icon).add_to(siteLayer)
+        popup = sitePopup(row['name'], row['cur_owner_id'], row['civ_id'])
+        folium.Marker(center, tooltip=row['name'], icon=icon, popup=popup).add_to(siteLayer)
 
     return siteLayer
 
