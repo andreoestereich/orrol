@@ -17,6 +17,17 @@ def getCoords(coorText):
             coordinates.append((int(sp[0]),int(sp[1])))
     return np.array(coordinates)
 
+def getRectangle(txt):
+    coord = txt.split(':')
+    y1,x1 = coord[0].split(',')
+    y2,x2 = coord[1].split(',')
+    return [[int(x1),int(y1)],[int(x2),int(y2)]]
+
+def rectangleCenter(corners):
+    xc = corners[0][0] + (corners[1][0]-corners[0][0])/2
+    yc = corners[0][1] + (corners[1][1]-corners[0][1])/2
+    return [xc, yc]
+
 #16 is the same upscalling used in the game when you zoom in
 def upscalling(x):
     return 16*x
@@ -94,5 +105,33 @@ def makeRegionsMap():
     mp.add_to(base_map)
     return base_map
 
+def makeSitesMap():
+    # siteIcons = {'camp':'☼', 'cave':'•', 'dark fortress':'Π', 'dark pits': 'º', 'forest retreat': '¶','fortress':'Ω','castle': '○',
+    #              'fort': '○','hamlet': '=','hillocks': 'Ω','labyrinth': '#','lair': '•','monastery': '○','mountain halls': 'Ω','ruins': 'μ',
+    #              'forest retreat ruins': 'μ','shrine': 'Å','tomb': '0','tower': 'I','town': '+','vault': '■'}
+
+    sites = pd.read_xml('region4-00101-02-21-legends.xml', xpath='./sites/*', encoding='CP437')
+    sites.set_index('id', inplace=True)
+
+    lgp_xml = pd.read_xml('region4-00101-02-21-legends_plus.xml', xpath='./sites/*')
+    lgp_xml.set_index('id', inplace=True)
+    lgp_xml.rename(columns={'structures':'structures_plus'}, inplace=True)
+
+    sites = sites.join(lgp_xml)
+
+    siteLayer = folium.FeatureGroup('Sites', control=False)
+    for _, row in sites.iterrows():
+        rect = getRectangle(row['rectangle'])
+        folium.Rectangle(bounds=rect, color=None, fill=True, fill_color='#ff0000', fill_opacity=0.2).add_to(siteLayer)
+        center = rectangleCenter(rect)
+        imgPath = 'imgs/sites/Icon_site_%s.png'%(row.type.replace(' ','_'))
+        icon = folium.features.CustomIcon(imgPath, icon_size=(16,16))
+        folium.Marker(center, tooltip=row['name'], icon=icon).add_to(siteLayer)
+
+    return siteLayer
+
+
 map = makeRegionsMap()
+makeSitesMap().add_to(map)
 map.save("map.html")
+
