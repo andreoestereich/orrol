@@ -57,11 +57,11 @@ def getPoly(coordText, frame):
     return poly
 
 def getRegions():
-    lg_xml = pd.read_xml('region4-00101-02-21-legends.xml', xpath='./regions/*', encoding='CP437')
+    lg_xml = pd.read_xml(legendsXML, xpath='./regions/*', encoding='CP437')
     lg_xml.set_index('id', inplace=True)
 
 
-    lgp_xml = pd.read_xml('region4-00101-02-21-legends_plus.xml', xpath='./regions/*', encoding='CP437')
+    lgp_xml = pd.read_xml(legendsXMLp, xpath='./regions/*')
     lgp_xml.set_index('id', inplace=True)
 
     regions = lg_xml.join(lgp_xml)
@@ -79,15 +79,17 @@ def getRegions():
     return gpd.GeoDataFrame(regions)
 
 def makeRegionsMap():
-    biomeColor = {'Ocean':'#2f49ff', 'Hills':'grey', 'Grassland':'lightgreen', 'Wetland':'brown', 'Desert':'yellow', 'Mountains':'black', 'Forest':'darkgreen', 'Tundra':'steelblue', 'Glacier':'white'}
+    biomeColor = {'Ocean':'#2f49ff', 'Hills':'grey', 'Grassland':'lightgreen', 'Wetland':'brown', 'Desert':'yellow', 'Mountains':'black', 'Forest':'darkgreen', 'Tundra':'steelblue', 'Glacier':'white', 'Lake':'lightblue'}
 
 
     regions = getRegions()
 
     center = centroid(regions[regions["type"]=="Ocean"]["geometry"][0])
     center = list(center.coords)[0]
+    bounds = regions[regions["type"]=="Ocean"]["geometry"][0].bounds
 
-    base_map = folium.Map(crs='Simple', zoom_start=0, tiles=None, location=center, default_zoom_start=24)
+    base_map = folium.Map(crs='Simple', zoom_start=0, tiles=None, location=center)
+    base_map.fit_bounds([[bounds[0],bounds[1]],[bounds[2],bounds[3]]])
 
     popup = folium.GeoJsonPopup(
         fields=["name", "evilness","type"],
@@ -109,20 +111,20 @@ def makeRegionsMap():
     return base_map
 
 def sitesNEntities():
-    sites = pd.read_xml('region4-00101-02-21-legends.xml', xpath='./sites/*', encoding='CP437')
+    sites = pd.read_xml(legendsXML, xpath='./sites/*', encoding='CP437')
     sites.set_index('id', inplace=True)
 
-    lgp_xml = pd.read_xml('region4-00101-02-21-legends_plus.xml', xpath='./sites/*')
+    lgp_xml = pd.read_xml(legendsXMLp, xpath='./sites/*')
     lgp_xml.set_index('id', inplace=True)
     lgp_xml.rename(columns={'structures':'structures_plus'}, inplace=True)
 
     sites = sites.join(lgp_xml)
     del lgp_xml
 
-    entities = pd.read_xml('region4-00101-02-21-legends.xml', xpath='./entities/*', encoding='CP437')
+    entities = pd.read_xml(legendsXML, xpath='./entities/*', encoding='CP437')
     entities.set_index('id', inplace=True)
     
-    lgp_xml = pd.read_xml('region4-00101-02-21-legends_plus.xml', xpath='./entities/*')
+    lgp_xml = pd.read_xml(legendsXMLp, xpath='./entities/*')
     lgp_xml = lgp_xml.filter(['id','race','type'])
     lgp_xml.set_index('id', inplace=True)
     entities = entities.join(lgp_xml)
@@ -148,9 +150,10 @@ def makeSitesMap():
             html += "<b>Unknown owner</b>"
         else:
             html += "<b>"+entities['name'][owner_id]+"</b>"
-        if not np.isnan(civ_id):
+        if (not np.isnan(civ_id)):
             html += ' from ' + entities['name'][civ_id]
-            html += ' (' + entities['race'][civ_id] + ').'
+            if isinstance(entities['race'][civ_id],str):
+                html += ' (' + entities['race'][civ_id] + ').'
         return html
 
     sites, entities = sitesNEntities()
@@ -167,6 +170,8 @@ def makeSitesMap():
 
     return siteLayer
 
+legendsXML = 'test/region4-00101-02-21-legends.xml'
+legendsXMLp = 'test/region4-00101-02-21-legends_plus.xml'
 
 map = makeRegionsMap()
 makeSitesMap().add_to(map)
