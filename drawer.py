@@ -15,19 +15,21 @@ popUpStyle = """
             box-shadow: 3px;
             """
 
+#In the game they do top to bottom and left to right coordinates. This means
+#that the coordinates are writen as (-long,lat) pairs
 def getCoords(coorText):
     coordinates = list()
     for coord in coorText.split('|'):
         if coord:
             sp = coord.split(',')
-            coordinates.append((int(sp[0]),int(sp[1])))
+            coordinates.append([-int(sp[1]),int(sp[0])])
     return np.array(coordinates)
 
-def getRectangle(txt):
+def getRectangle(txt,xmax):
     coord = txt.split(':')
     y1,x1 = coord[0].split(',')
     y2,x2 = coord[1].split(',')
-    return [[int(x1),int(y1)],[int(x2),int(y2)]]
+    return [[xmax-int(x1),int(y1)],[xmax-int(x2),int(y2)]]
 
 def rectangleCenter(corners):
     xc = corners[0][0] + (corners[1][0]-corners[0][0])/2
@@ -41,7 +43,7 @@ def upscalling(x):
 #frame has form (xMin, xMax, yMin, yMax)
 def mkImg(coordintes, frame):
     img = np.zeros((upscalling(frame[1]-frame[0]+1),upscalling(frame[3]-frame[2]+1)), dtype=np.ubyte)
-    for y, x in coordintes:
+    for x, y in coordintes:
         for i in range(upscalling(x-frame[0]),upscalling(x-frame[0]+1)):
             for j in range(upscalling(y-frame[2]),upscalling(y-frame[2]+1)):
                 img[i][j] = 1
@@ -108,7 +110,7 @@ def makeRegionsMap():
             "fillColor": biomeColor[x["properties"]["type"]]
         }, popup=popup)
     mp.add_to(base_map)
-    return base_map
+    return (base_map, bounds[2])
 
 def sitesNEntities():
     sites = pd.read_xml(legendsXML, xpath='./sites/*', encoding='CP437')
@@ -136,7 +138,7 @@ def sitesNEntities():
 
     return (sites, entities)
 
-def makeSitesMap():
+def makeSitesMap(xmax):
     # siteIcons = {'camp':'☼', 'cave':'•', 'dark fortress':'Π', 'dark pits': 'º', 'forest retreat': '¶','fortress':'Ω','castle': '○',
     #              'fort': '○','hamlet': '=','hillocks': 'Ω','labyrinth': '#','lair': '•','monastery': '○','mountain halls': 'Ω','ruins': 'μ',
     #              'forest retreat ruins': 'μ','shrine': 'Å','tomb': '0','tower': 'I','town': '+','vault': '■'}
@@ -160,7 +162,7 @@ def makeSitesMap():
 
     siteLayer = folium.FeatureGroup('Sites', control=True)
     for _, row in sites.iterrows():
-        rect = getRectangle(row['rectangle'])
+        rect = getRectangle(row['rectangle'], xmax)
         folium.Rectangle(bounds=rect, color=None, fill=True, fill_color='#ff0000', fill_opacity=0.2).add_to(siteLayer)
         center = rectangleCenter(rect)
         imgPath = 'imgs/sites/Icon_site_%s.png'%(row.type.replace(' ','_'))
@@ -173,7 +175,7 @@ def makeSitesMap():
 legendsXML = 'test/region4-00101-02-21-legends.xml'
 legendsXMLp = 'test/region4-00101-02-21-legends_plus.xml'
 
-map = makeRegionsMap()
-makeSitesMap().add_to(map)
+map, xmax = makeRegionsMap()
+makeSitesMap(xmax).add_to(map)
 map.save("map.html")
 
