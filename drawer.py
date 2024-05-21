@@ -6,6 +6,7 @@ import numpy as np
 import cv2 as cv
 from shapely import Polygon, MultiPolygon, centroid
 import folium
+from folium.plugins import GroupedLayerControl
 
 #import matplotlib.pyplot as plt
 
@@ -143,6 +144,7 @@ def makeSitesMap(xmax):
     #              'fort': '○','hamlet': '=','hillocks': 'Ω','labyrinth': '#','lair': '•','monastery': '○','mountain halls': 'Ω','ruins': 'μ',
     #              'forest retreat ruins': 'μ','shrine': 'Å','tomb': '0','tower': 'I','town': '+','vault': '■'}
     def sitePopup(name, owner_id, civ_id):
+        raceName = "Unknown"
         html = ""
         if isinstance(name,str):
             html += "<h4>%s</h4><br>"%(name)
@@ -155,27 +157,41 @@ def makeSitesMap(xmax):
         if (not np.isnan(civ_id)):
             html += ' from ' + entities['name'][civ_id]
             if isinstance(entities['race'][civ_id],str):
-                html += ' (' + entities['race'][civ_id] + ').'
-        return html
+                raceName = entities['race'][civ_id]
+                html += ' (' + raceName  + ').'
+        return html, raceName
 
     sites, entities = sitesNEntities()
 
-    siteLayer = folium.FeatureGroup('Sites', control=True)
+
+    raceClusters = dict()
+
+    siteLayer = folium.FeatureGroup('Sites', control=False, show=True)
+
     for _, row in sites.iterrows():
         rect = getRectangle(row['rectangle'], xmax)
         folium.Rectangle(bounds=rect, color=None, fill=True, fill_color='#ff0000', fill_opacity=0.2).add_to(siteLayer)
         center = rectangleCenter(rect)
         imgPath = 'imgs/sites/Icon_site_%s.png'%(row.type.replace(' ','_'))
         icon = folium.features.CustomIcon(imgPath, icon_size=(16,16))
-        popup = sitePopup(row['name'], row['cur_owner_id'], row['civ_id'])
-        folium.Marker(center, tooltip=row['name'], icon=icon, popup=popup).add_to(siteLayer)
+        popup, race = sitePopup(row['name'], row['cur_owner_id'], row['civ_id'])
 
-    return siteLayer
+        if not race in raceClusters.keys():
+            raceClusters[race] = folium.FeatureGroup( race, control=True, show=True)
+
+        folium.Marker(center, tooltip=row['name'], icon=icon, popup=popup).add_to(raceClusters[race])
+
+    for raceC in raceClusters.values():
+        raceC.add_to(siteLayer)
+    layerCtrl = GroupedLayerControl( groups={'Races': list(raceClusters.values())}, exclusive_groups=False, collapsed=True)
+    return siteLayer, layerCtrl
 
 legendsXML = 'test/region4-00101-02-21-legends.xml'
 legendsXMLp = 'test/region4-00101-02-21-legends_plus.xml'
 
 map, xmax = makeRegionsMap()
-makeSitesMap(xmax).add_to(map)
+siteGroup, siteLayerCtrl = makeSitesMap(xmax)
+siteGroup.add_to(map)
+siteLayerCtrl.add_to(map)
 map.save("map.html")
 
