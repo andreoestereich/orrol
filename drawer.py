@@ -6,7 +6,7 @@ import numpy as np
 import cv2 as cv
 from shapely import Polygon, MultiPolygon, centroid
 import folium
-from folium.plugins import GroupedLayerControl
+from folium.plugins import GroupedLayerControl, Search
 
 #import matplotlib.pyplot as plt
 
@@ -167,6 +167,7 @@ def makeSitesMap(xmax):
     raceClusters = dict()
 
     siteLayer = folium.FeatureGroup('Sites', control=False, show=True)
+    search_group = folium.FeatureGroup('SG', control=False, show=False)
 
     for _, row in sites.iterrows():
         rect = getRectangle(row['rectangle'], xmax)
@@ -179,19 +180,24 @@ def makeSitesMap(xmax):
         if not race in raceClusters.keys():
             raceClusters[race] = folium.FeatureGroup( race, control=True, show=True)
 
-        folium.Marker(center, tooltip=row['name'], icon=icon, popup=popup).add_to(raceClusters[race])
+        marker = folium.Marker(center, tooltip=row['name'], icon=icon, popup=popup, name=row['name'])
+        marker.add_to(raceClusters[race])
+        marker.add_to(search_group)
 
     for raceC in raceClusters.values():
         raceC.add_to(siteLayer)
     layerCtrl = GroupedLayerControl( groups={'Races': list(raceClusters.values())}, exclusive_groups=False, collapsed=True)
-    return siteLayer, layerCtrl
+    return siteLayer, layerCtrl, search_group
 
 legendsXML = 'test/region4-00101-02-21-legends.xml'
 legendsXMLp = 'test/region4-00101-02-21-legends_plus.xml'
 
 map, xmax = makeRegionsMap()
-siteGroup, siteLayerCtrl = makeSitesMap(xmax)
+siteGroup, siteLayerCtrl, search_group = makeSitesMap(xmax)
+search_group.add_to(map)
+searchBar = Search(layer=search_group, position='topright', collapsed=True, search_label="name")
 siteGroup.add_to(map)
 siteLayerCtrl.add_to(map)
+searchBar.add_to(map)
 map.save("map.html")
 
