@@ -7,6 +7,8 @@ This is an atempt to draw interacting maps for dwarf fortress worlds using xml e
 To do list:
 - [x] Draw regions colored according to their type.
 - [x] Popup info about regions.
+- [x] Searchbar for site names!
+- [x] Layer control according to race.
 - [ ] Draw rivers and brooks with their names.
 - [ ] Placemark vulcanos and other mountain peaks.
 - [x] Put sites rectangles and their place markers with game icons. 
