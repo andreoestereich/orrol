@@ -195,7 +195,7 @@ legendsXMLp = 'test/region4-00101-02-21-legends_plus.xml'
 map, xmax = makeRegionsMap()
 siteGroup, siteLayerCtrl, search_group = makeSitesMap(xmax)
 search_group.add_to(map)
-searchBar = Search(layer=search_group, position='topright', collapsed=True, search_label="name")
+searchBar = Search(layer=search_group, collapsed=True, search_label="name")
 siteGroup.add_to(map)
 siteLayerCtrl.add_to(map)
 searchBar.add_to(map)
